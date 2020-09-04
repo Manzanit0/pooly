@@ -57,6 +57,19 @@ defmodule Pooly.Server do
   end
 
   @impl true
+  def handle_info({:DOWN, ref, _, _, _}, state) do
+    case :ets.match(state.monitors, {:"$1", ref}) do
+      [[pid]] ->
+        true = :ets.delete(state.monitors, pid)
+        new_state = %{state | workers: [pid | state.workers]}
+        {:noreply, new_state}
+
+      [[]] ->
+        {:noreply, state}
+    end
+  end
+
+  @impl true
   def handle_call(:status, _from, state) do
     {:reply, {length(state.workers), :ets.info(state.monitors, :size)}, state}
   end
