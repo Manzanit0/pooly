@@ -31,6 +31,7 @@ defmodule Pooly.Server do
 
   @impl true
   def init([sup, pool_config]) when is_pid(sup) do
+    Process.flag(:trap_exit, true)
     monitors = :ets.new(:monitors, [:private])
     init(pool_config, %State{sup: sup, monitors: monitors})
   end
@@ -45,7 +46,7 @@ defmodule Pooly.Server do
   end
 
   @impl true
-  def handle_info(:start_worker_supervisor, state) do
+  def handle_info(:start_worker_supervisor, %State{} = state) do
     # Since the Server is in charge of spinning up the WorkerSupervisor, and we
     # don't want the upstream supervisor restarting it, make it temporary.
     supervisor_spec = Supervisor.child_spec({Pooly.WorkerSupervisor, []}, restart: :temporary)
@@ -57,7 +58,7 @@ defmodule Pooly.Server do
   end
 
   @impl true
-  def handle_info({:DOWN, ref, _, _, _}, state) do
+  def handle_info({:DOWN, ref, _, _, _}, %State{} = state) do
     case :ets.match(state.monitors, {:"$1", ref}) do
       [[pid]] ->
         true = :ets.delete(state.monitors, pid)
@@ -70,12 +71,26 @@ defmodule Pooly.Server do
   end
 
   @impl true
-  def handle_call(:status, _from, state) do
+  def handle_info({:EXIT, pid, _reason}, %State{} = state) do
+    case :ets.lookup(state.monitors, pid) do
+      [[pid, ref]] ->
+        true = Process.demonitor(ref)
+        true = :ets.delete(state.monitors, pid)
+        new_state = %{state | workers: [new_worker(state.sup) | state.workers]}
+        {:noreply, new_state}
+
+      [[]] ->
+        {:noreply, state}
+    end
+  end
+
+  @impl true
+  def handle_call(:status, _from, %State{} = state) do
     {:reply, {length(state.workers), :ets.info(state.monitors, :size)}, state}
   end
 
   @impl true
-  def handle_call(:checkout, {from_pid, _ref}, state) do
+  def handle_call(:checkout, {from_pid, _ref}, %State{} = state) do
     case state.workers do
       [worker | rest] ->
         # We want to monitor the client process because in case it crashes, we
@@ -90,7 +105,7 @@ defmodule Pooly.Server do
   end
 
   @impl true
-  def handle_cast({:checkin, worker_pid}, state) do
+  def handle_cast({:checkin, worker_pid}, %State{} = state) do
     case :ets.lookup(state.monitors, worker_pid) do
       [{pid, ref}] ->
         true = Process.demonitor(ref)
@@ -106,8 +121,9 @@ defmodule Pooly.Server do
 
   defp prepopulate(size, _sup, workers) when size < 1, do: workers
 
-  defp prepopulate(size, sup, workers),
-    do: prepopulate(size - 1, sup, [new_worker(sup) | workers])
+  defp prepopulate(size, sup, workers) do
+    prepopulate(size - 1, sup, [new_worker(sup) | workers])
+  end
 
   defp new_worker(sup) do
     {:ok, worker} = Pooly.WorkerSupervisor.start_child(sup, [])
