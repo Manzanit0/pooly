@@ -3,10 +3,10 @@ defmodule Pooly do
 
   def start(_type, _args) do
     pool_config = [
-      [name: "Pool1", size: 2],
-      [name: "Pool2", size: 3],
-      [name: "Pool3", size: 5],
-      [name: "Pool4", size: 4]
+      [name: "Pool1", size: 2, max_overflow: 2],
+      [name: "Pool2", size: 3, max_overflow: 2],
+      [name: "Pool3", size: 5, max_overflow: 2],
+      [name: "Pool4", size: 4, max_overflow: 2]
     ]
 
     Pooly.Supervisor.start_link(pool_config)
