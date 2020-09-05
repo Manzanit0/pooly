@@ -1,26 +1,35 @@
 # Pooly
 
 Simple worker-pooling application as described in [_The little Elixir & OTP
-guidebook_][0]. The code has been adjusted to adhere to the newest Elixir
-versions though.
+guidebook_][0] with some modifications.
 
-Each commit contains a version of the application, starting from the most
-barebones one and enhancing it over time.
+## Supervision tree
 
-To see `Pooly` in action, just spin up the REPL:
+This is the kind of supervision tree that's spinned up when `Pooly` is started:
 
-```sh
-sh> iex -S mix
-iex> Pooly.big_bang()
-...
 ```
-
-## Major differences compared to the guidebook
-
-- Runs on Elixir 1.10 instead of 1.3.
-- Usage of `DynamicSupervisor` instead of old `Supervisor` spec +
-  `:simple_one_for_one` strategy.
-- Usage of `Supervisor.child_spec/2` instead of `Supervisor.Spec.supervisor`
+                                --------------------
+                                | Pooly.Supervisor |
+                                --------------------
+                                          |
+                            -----------------------------
+                            |                           |
+                    ----------------        -------------------------
+                    | Pooly.Server |        | Pooly.PoolsSupervisor |
+                    ----------------        -------------------------
+                                               |                |
+                          ------------------------            ------------------------
+                          | Pooly.PoolSupervisor |            | Pooly.PoolSupervisor |
+                          ------------------------            ------------------------
+                            |                 |                           |
+            --------------------------   --------------------            ...
+            | Pooly.WorkerSupervisor |   | Pooly.PoolServer |
+            --------------------------   --------------------
+            |             |         |
+        ----------   ----------  ----------
+        | Worker |   | Worker |  | Worker |
+        ----------   ----------  ----------
+```
 
 ## Installation
 
